@@ -203,8 +203,10 @@ python train.py --train data/manifests/grasp-anything++/train.jsonl --val data/m
 python eval.py --checkpoint runs/film/best.pt --manifest data/manifests/grasp-anything++/test_seen.jsonl \
   --data-root data/raw --output runs/film/test_seen_metrics.json
 
-python eval.py --checkpoint runs/film/best.pt --manifest data/manifests/grasp-anything++/test_unseen.jsonl \
-  --data-root data/raw --output runs/film/test_unseen_metrics.json
+# or evaluate both splits at once -> two rows for the paper table:
+python eval.py --checkpoint runs/film/best.pt \
+  --both-splits data/manifests/grasp-anything++ --data-root data/raw \
+  --output runs/film/test_metrics.json
 
 # language-dependency check: shuffled/empty instructions should hurt
 python eval.py --checkpoint runs/film/best.pt --manifest data/manifests/grasp-anything++/test_seen.jsonl \
@@ -217,6 +219,10 @@ python predict.py --checkpoint runs/film/best.pt --image data/raw/grasp-anything
 Evaluation reports **Top-1/Top-5 grasp success**: a prediction is correct when
 its rotated-rectangle IoU with a ground-truth grasp exceeds `0.25` and the angle
 difference is within `30°` (mod 180°).
+
+`--both-splits DIR` reads `DIR/test_seen.jsonl` and `DIR/test_unseen.jsonl`, prints a
+compact table (`split / top1 / top5 / samples`) and writes a combined JSON with a
+`"splits"` object. `--manifest FILE` keeps the original single-manifest behaviour.
 
 ## Notes
 
