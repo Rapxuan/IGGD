@@ -1,0 +1,29 @@
+# grasp-sig — SigLIP 2 + FiLM language-driven grasp detection.
+
+model:
+  backbone: "google/siglip2-base-patch16-256"   # HF model id, or a local directory
+  freeze: true                                  # keep the SigLIP encoders frozen
+  image_size: 256
+  patch_size: 16
+  visual_dim: 768                               # SigLIP 2 base vision hidden size
+  text_dim: 768                                 # SigLIP 2 base text hidden size
+  text_length: 64                               # max token length for instructions
+  channels: 128                                 # head channel width (multiple of 16)
+  fusion: "film"                                # none | concat | film
+
+dataset:
+  max_boxes: 16
+  num_workers: 4
+
+train:
+  epochs: 30
+  batch_size: 16
+  lr: 0.0003
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  save_every: 5
+
+eval:
+  top_k: 5
+  iou_threshold: 0.25
+  angle_tolerance_deg: 30.0

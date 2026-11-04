@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+# dataset / experiment output at the repo root only (never graspsig/data/)
+/runs/
+/data/
+/tmp/
+*.pt
+*.pth
+*.safetensors

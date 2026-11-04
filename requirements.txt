@@ -1,0 +1,9 @@
+torch>=2.4,<3
+transformers==4.49.0
+numpy>=1.26,<3
+Pillow>=10,<13
+sentencepiece>=0.2,<0.3
+protobuf>=4.25,<7
+safetensors>=0.4
+pyyaml>=6.0
+tqdm>=4.65
