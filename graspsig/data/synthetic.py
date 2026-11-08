@@ -1,7 +1,5 @@
 """Generate a tiny synthetic dataset (red/blue objects) for pipeline smoke tests."""
 
-# from __future__ import annotations
-
 import json
 import math
 from pathlib import Path

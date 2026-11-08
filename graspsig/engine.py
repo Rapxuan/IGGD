@@ -1,7 +1,5 @@
 """Training/eval utilities: device, seeding, loaders, checkpoints, evaluation."""
 
-from __future__ import annotations
-
 import random
 from pathlib import Path
 

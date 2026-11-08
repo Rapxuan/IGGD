@@ -1,20 +1,10 @@
-"""Evaluate a checkpoint: Top-1/Top-5 grasp success, with optional text perturbation.
-
-Two modes:
-  * ``--manifest <file>``            evaluate one manifest (as before)
-  * ``--both-splits <dir>``          evaluate ``<dir>/test_seen.jsonl`` and
-                                     ``<dir>/test_unseen.jsonl`` and print two rows
-                                     for the paper table (written by ``prepare_data.py split``)
-"""
-
-from __future__ import annotations
 
 import argparse
 import json
 import random
 from pathlib import Path
 
-from transformers import SiglipProcessor
+from graspsig.models.backbone import load_siglip_processor
 
 from graspsig.config import load_config
 from graspsig.data import load_manifest
@@ -85,7 +75,7 @@ def main():
     seed_everything(args.seed)
     device = choose_device(args.device)
     model, _ = load_checkpoint(args.checkpoint, device)
-    processor = SiglipProcessor.from_pretrained(args.checkpoint.parent / "processor")
+    processor = load_siglip_processor(args.checkpoint.parent / "processor")
 
     if args.both_splits is not None:
         results = {}

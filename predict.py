@@ -1,14 +1,12 @@
 """Draw language-conditioned grasps on one image."""
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
 
 import torch
 from PIL import Image
-from transformers import SiglipProcessor
+from graspsig.models.backbone import load_siglip_processor
 
 from graspsig.data.dataset import process_inputs
 from graspsig.engine import choose_device, load_checkpoint, move_inputs
@@ -34,7 +32,7 @@ def main():
     device = choose_device(args.device)
     model, _ = load_checkpoint(args.checkpoint, device)
     model.eval()
-    processor = SiglipProcessor.from_pretrained(args.checkpoint.parent / "processor")
+    processor = load_siglip_processor(args.checkpoint.parent / "processor")
 
     with Image.open(args.image) as source:
         image = source.convert("RGB")

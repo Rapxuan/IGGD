@@ -1,7 +1,5 @@
 """Training losses: balanced BCE (quality) + smooth-L1 (geometry)."""
 
-from __future__ import annotations
-
 import torch
 import torch.nn.functional as F
 

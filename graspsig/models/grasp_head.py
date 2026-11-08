@@ -1,7 +1,5 @@
 """Language fusion (none / concat / film) + decoder + dense grasp head."""
 
-from __future__ import annotations
-
 import math
 
 import torch

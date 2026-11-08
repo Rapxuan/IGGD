@@ -1,7 +1,5 @@
 """Group Grasp-Anything++ samples using the repository's object-ID lists."""
 
-# from __future__ import annotations
-
 import pickle
 from pathlib import Path
 

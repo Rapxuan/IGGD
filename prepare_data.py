@@ -7,8 +7,6 @@ Convert expects the raw layout::
     <grasps>/<scene>_<object>_<part>.pt          # Nx6 [aux, x, y, w, h, theta_degrees]
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import pickle

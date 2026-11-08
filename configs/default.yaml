@@ -1,8 +1,9 @@
-# grasp-sig — SigLIP 2 + FiLM language-driven grasp detection.
+# IGGD (full fine-tuning) — SigLIP 2 + FiLM language-driven grasp detection.
+# For the frozen-backbone model use configs/head_only.yaml instead.
 
 model:
   backbone: "google/siglip2-base-patch16-256"   # HF model id, or a local directory
-  freeze: true                                  # keep the SigLIP encoders frozen
+  freeze: false                                  # true = train the head only
   image_size: 256
   patch_size: 16
   visual_dim: 768                               # SigLIP 2 base vision hidden size

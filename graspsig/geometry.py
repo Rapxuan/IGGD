@@ -5,8 +5,6 @@ A grasp is ``[x, y, w, h, theta]`` with ``w`` along ``(cos theta, sin theta)``
 and ``h`` perpendicular.
 """
 
-from __future__ import annotations
-
 import math
 from dataclasses import dataclass
 

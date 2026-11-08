@@ -1,7 +1,5 @@
 """Configuration loading with a built-in default (works without PyYAML)."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

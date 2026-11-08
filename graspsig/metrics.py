@@ -1,7 +1,5 @@
 """Evaluation metrics: per-sample grasp success and Top-k accuracy."""
 
-from __future__ import annotations
-
 import math
 
 import numpy as np
