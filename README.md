@@ -1,84 +1,111 @@
-# grasp-sig-split — SigLIP 2 + FiLM with Grasp-Anything Dataset Splits
+# IGGD — Instruction-Guided Grasp Detection
 
-A single-network, **language-driven grasp detection** method for the
-*"Language-Driven Grasp Detection"* programming test.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.4%2B-ee4c2c.svg)](https://pytorch.org/)
 
-Given an RGB image and a natural-language instruction (e.g. *"grasp the blue
-bottle"*), the model predicts the **rotated-rectangle grasp pose** of the
-referred object — `(x, y, w, h, theta)` with `theta` clockwise in radians.
+Language-driven grasp detection: given an RGB image and a natural-language
+instruction (*"grasp the blue bottle"*), predict the rotated-rectangle grasp
+pose `(x, y, w, h, θ)` of the object the instruction refers to.
 
-## Method (the "proposed method")
+IGGD keeps a pretrained **SigLIP 2** dual encoder and trains a lightweight
+**FiLM-conditioned** decoder that regresses a dense grasp map. Only the referred
+object yields confident proposals, so "which object" and "where to grasp" are
+solved by a single network instead of a detector-plus-grasp-generator pipeline.
 
-A **frozen SigLIP 2** encoder (`google/siglip2-base-patch16-256`) provides both
-modalities:
+## Method
 
-1. The **vision tower** encodes the image into a `16x16` patch grid (no CLS
-   token is removed — SigLIP patches are all spatial).
-2. The **text tower** turns the instruction into one pooled embedding.
-3. A small **head** projects the patch grid, fuses the text embedding through
-   one of three strategies — `none` / `concat` / **`film`** (feature-wise linear
-   modulation, `F' = F*(1+gamma) + beta`, zero-initialised as identity) — then
-   upsamples and predicts a **dense** map at every pixel:
-   `(Q, sin(2θ), cos(2θ), W, H)`.
-4. The double-angle `sin(2θ)/cos(2θ)` makes the head invariant to the 180°
-   symmetry of a grasp rectangle; `W,H` are activated with softplus.
+1. **Frozen SigLIP 2** encoder (`google/siglip2-base-patch16-256`) encodes the
+   image into a `16×16` patch grid (no CLS token — SigLIP patches are all
+   spatial) and the instruction into one pooled text embedding.
+2. **FiLM conditioning.** The text embedding is mapped to per-channel scale and
+   shift and applied residually to the visual features:
+   `z ← z ⊙ (1 + γ) + β`. The layer is zero-initialised, so it starts as an
+   identity and learns to amplify the channels of the referred object.
+   Two baselines are available: `none` (no language) and `concat`.
+3. **Dense grasp head.** The decoder upsamples to input resolution and predicts,
+   at every pixel, a quality logit `q̂` and
+   `(sin 2θ̂, cos 2θ̂, Ŵ, Ĥ)`. The double-angle parameterisation makes the head
+   invariant to the 180° symmetry of a grasp rectangle; `W, H` use softplus.
+4. **Loss.** Foreground/background-balanced BCE on quality plus a smooth-L1 on
+   geometry over positive pixels. Only the head trains by default; the backbone
+   can optionally be fine-tuned at a 10× smaller learning rate.
 
-Only the head trains; the backbone stays frozen. This is what makes the detector
-"language-driven" while staying cheap enough for a free Colab GPU.
+## Results
 
-## Layout
+Grasp-Anything++ official seen/unseen splits. A prediction is correct when its
+rotated-rectangle IoU with a ground-truth grasp exceeds `0.25` and the angle
+differs by at most `30°` (mod 180°).
+
+| Method | Seen Top-1 | Seen Top-5 | Unseen Top-1 | Unseen Top-5 |
+|---|---|---|---|---|
+| **IGGD (frozen backbone)** | 0.58 | 0.84 | 0.38 | 0.68 |
+| IGGD (full fine-tune) | 0.60 | 0.80 | 0.42 | 0.62 |
+
+**Language dependency** (frozen backbone, seen split): shuffling the
+instructions drops Top-1 from `0.58` to `0.31` (Top-5 `0.84 → 0.54`) and
+emptying them drops it to `0.30` — the decoder genuinely relies on the text
+signal rather than the image alone.
+
+## Repository layout
 
 ```
-grasp-sig-split/
-├── configs/default.yaml      # model / dataset / train / eval settings
+IGGD/
+├── configs/
+│   ├── default.yaml        # full fine-tuning configuration
+│   └── head_only.yaml      # frozen-backbone FiLM configuration
 ├── graspsig/
-│   ├── config.py             # config loading + defaults
-│   ├── geometry.py           # letterbox, dense targets, decode, rotated IoU
-│   ├── metrics.py            # Top-k grasp success
-│   ├── losses.py             # balanced BCE + smooth-L1
-│   ├── viz.py                # draw rectangles
-│   ├── engine.py             # device/seed/loaders/checkpoints/eval
+│   ├── config.py           # config loading + defaults
+│   ├── geometry.py         # letterbox, dense targets, decode, rotated IoU
+│   ├── metrics.py          # Top-k grasp success
+│   ├── losses.py           # balanced BCE + smooth-L1
+│   ├── viz.py              # draw grasp rectangles
+│   ├── engine.py           # device/seed/loaders/checkpoints/eval
 │   ├── data/
-│   │   ├── dataset.py        # JSONL manifest loader + collation
-│   │   ├── grasp_anything_split.py  # seen/unseen object-ID grouping
-│   │   └── synthetic.py      # synthetic data + scene split
+│   │   ├── dataset.py                  # JSONL manifest loader + collation
+│   │   ├── grasp_anything_split.py     # seen/unseen object-ID grouping
+│   │   └── synthetic.py                # synthetic data + scene split
 │   └── models/
-│       ├── backbone.py       # frozen SigLIP 2 encoders
-│       ├── grasp_head.py     # fusion + decoder + head
-│       └── siglip_grasp.py   # full model + activation
-├── prepare_data.py           # synthetic / split / preview
+│       ├── backbone.py     # SigLIP 2 encoders (+ optional freezing)
+│       ├── grasp_head.py   # fusion + decoder + head
+│       └── siglip_grasp.py # full model + activation
+├── prepare_data.py         # inspect / convert / split / preview / synthetic
 ├── train.py
 ├── eval.py
 ├── predict.py
-└── paper/                    # 2-page CVPR paper (LaTeX)
+├── split/                  # official Grasp-Anything++ ID lists (seen/unseen)
 ```
 
 ## Install
 
 ```bash
-conda create -n wzx-grasp python=3.11 -y
-conda activate wzx-grasp
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128   # RTX 5090 / Blackwell
+conda create -n iggd python=3.11 -y
+conda activate iggd
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128  # CUDA 12.8 build
 pip install -r requirements.txt
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
-## Quick smoke test (synthetic, no real data)
+The SigLIP 2 weights (`google/siglip2-base-patch16-256`) are downloaded from the
+Hugging Face Hub on first use. Set `HF_HUB_OFFLINE=1` if you keep a local mirror
+and point `model.backbone` at that directory instead.
+
+## Quick smoke test (synthetic data, no downloads)
 
 ```bash
 python prepare_data.py synthetic --out data/synthetic --scenes 12
 python prepare_data.py split --manifest data/synthetic/all.jsonl \
   --data-root data/synthetic --out data/synthetic/manifests
 
-python train.py --train data/synthetic/manifests/train.jsonl \
+python train.py --config configs/head_only.yaml \
+  --train data/synthetic/manifests/train.jsonl \
   --val data/synthetic/manifests/val.jsonl --data-root data/synthetic \
-  --out runs/smoke --fusion film --epochs 1 --batch-size 8
+  --out runs/smoke --epochs 1 --batch-size 8
 ```
 
-## Prepare real Grasp-Anything++ data
+## Prepare Grasp-Anything++
 
-Keep the two downloaded datasets separate; only the following directories are
-needed by this model. Neither negative grasp labels nor part masks are read.
+Only images, instructions and positive grasps are used; negative labels and
+part masks are not read. Arrange the downloads as:
 
 ```text
 data/raw/
@@ -89,7 +116,7 @@ data/raw/
     grasp_label_positive/<scene>_<object_id>_<part_id>.pt
 ```
 
-Convert the paired images, instructions and positive grasps into one manifest:
+Convert them into a single JSONL manifest:
 
 ```bash
 python prepare_data.py convert \
@@ -99,136 +126,136 @@ python prepare_data.py convert \
   --root data/raw --output data/manifests/all.jsonl --trust-pickle
 ```
 
-If the instruction pickle has a nested schema, select its exact field with
-`--instruction-key`. A converted record has this format:
+Use `--instruction-key` if the instruction pickles carry a nested schema, and
+`prepare_data.py inspect --file <pkl> --trust-pickle` to see what a record
+contains. A converted record looks like:
 
 ```json
-{"id":"scene0_0_0:0","scene_id":"scene0","image":"grasp-anything/image/scene0.jpg",
- "text":"Grasp the blue bottle.","grasps":[[120,150,60,25,0.2]]}
+{"id": "scene0_0_0:0", "scene_id": "scene0",
+ "image": "grasp-anything/image/scene0.jpg",
+ "text": "Grasp the blue bottle.",
+ "grasps": [[120, 150, 60, 25, 0.2]]}
 ```
 
-`image` is relative to `--data-root`; `grasps` are `[x,y,w,h,theta]` in original
-pixels, theta clockwise radians. All commands use the same `data/raw` root.
+`image` is relative to `--data-root`; `grasps` are `[x, y, w, h, θ]` in original
+pixels with `θ` clockwise in radians.
 
-### Reuse Grasp-Anything / LGD seen/unseen IDs
+### Seen/unseen splits
 
-Obtain the lists from the [LGD repository](https://github.com/Fsoft-AIC/LGD/tree/501904dc5c30c8fad58d90f7e4f49b4095f11eb0/split/grasp-anything%2B%2B),
-preserving this directory structure:
+The official Grasp-Anything++ object-ID lists are already in `split/`:
 
 ```text
-LGD/split/grasp-anything++/
+split/grasp-anything++/
   train/seen.obj
   test/seen.obj
   test/unseen.obj
 ```
 
-Use the existing `split` command with one additional path:
+Build the manifests from them:
 
 ```bash
 python prepare_data.py split \
   --manifest data/manifests/all.jsonl --data-root data/raw \
-  --grasp-anything-split LGD/split/grasp-anything++ \
+  --grasp-anything-split split/grasp-anything++ \
   --out data/manifests/grasp-anything++ --val-fraction 0.1 --seed 42 --trust-pickle
 ```
 
-The `.obj` files are trusted pickle ID lists. Matching follows LGD's object
-key: `scene_0_12:3` identifies annotation `scene_0_12`, which matches the Grasp-Anything
-object ID `scene_0`. Part IDs may have multiple digits. Instructions and parts
-of the same object inherit its Grasp-Anything split membership. For handwritten manifests,
-use the same sample-ID format or supply `"annotation_id": "scene_0_12"`.
-
-ID matching lives in `graspsig/data/grasp_anything_split.py`:
-
-| Function | Purpose |
+| ID list | Output |
 |---|---|
-| `load_grasp_object_ids` | Read object IDs from a `.obj` list |
-| `extract_grasp_object_id` | Extract `scene_object` from a manifest record |
-| `group_grasp_anything_records_by_split` | Group records by the source train/seen/unseen lists |
-
-| Grasp-Anything / LGD ID list | Output |
-|---|---|
-| `train/seen.obj` | `train.jsonl` and `val.jsonl` |
+| `train/seen.obj` | `train.jsonl` + `val.jsonl` |
 | `test/seen.obj` | `test_seen.jsonl` |
 | `test/unseen.obj` | `test_unseen.jsonl` |
 
-Grasp-Anything / LGD train/test and seen/unseen membership is preserved. Only the source
-training pool gets a custom, scene-disjoint validation holdout (10% of its
-scenes by default); this holdout is not LGD's annotation-index train/val split.
-Grasp-Anything / LGD test sets are never used to select the model. Their scene/image
-overlap with other sets is not changed: object-ID membership does not imply
-scene-disjoint Grasp-Anything / LGD test sets.
+Matching follows LGD's object key: `scene_0_12:3` is annotation `scene_0_12`,
+which belongs to Grasp-Anything object `scene_0`. The validation holdout is
+drawn scene-disjoint from the *training* pool only; the test splits are never
+used for model selection. `split_report.json` records source lists, seed,
+sample/scene counts, `unmatched_samples` and `missing_objects`, so a partial
+download is easy to spot. An object ID appearing in two source lists is
+rejected rather than silently assigned.
 
-`split_report.json` records the source lists, seed, sample/scene counts and
-object-ID coverage under `grasp_anything_split_dir` and `grasp_anything_id_lists`.
-Samples absent from all supplied lists are excluded and
-counted as `unmatched_samples`; listed IDs absent from the local manifest are
-counted as `missing_objects`. Incomplete local downloads can therefore produce
-partial or empty test manifests. An object ID present in multiple Grasp-Anything / LGD
-lists is rejected instead of being placed in conflicting sets.
+Without `--grasp-anything-split`, a plain scene-disjoint 80/10/10 split is
+produced instead (`--test-fraction` applies to that mode).
 
-For the original Grasp-Anything layout, point `--grasp-anything-split` at its
-`split/grasp-anything` directory containing only `seen.obj` and `unseen.obj`.
-The seen pool becomes train/val and unseen becomes `test_unseen.jsonl`; no
-independent `test_seen.jsonl` is invented. Choose the Grasp-Anything / LGD lists appropriate
-to the annotation version you downloaded. The model/training code still reads
-JSONL files and does not scan `.obj` lists automatically.
-
-Without `--grasp-anything-split`, the existing custom scene-disjoint 80/10/10 split
-remains available. `--test-fraction` applies only to that custom mode.
-
-To render annotation previews:
+To eyeball annotations before training:
 
 ```bash
 python prepare_data.py preview --manifest data/manifests/grasp-anything++/train.jsonl \
   --data-root data/raw --out runs/annotation_check --count 30
 ```
 
-## Train (main experiment + ablation)
+## Training
+
+Frozen backbone (the main experiment):
 
 ```bash
-python train.py --train data/manifests/grasp-anything++/train.jsonl --val data/manifests/grasp-anything++/val.jsonl \
+python train.py --config configs/head_only.yaml \
+  --train data/manifests/grasp-anything++/train.jsonl \
+  --val   data/manifests/grasp-anything++/val.jsonl \
   --data-root data/raw --out runs/film --fusion film \
-  --epochs 30 --batch-size 16 --amp --amp-dtype bfloat16
-
-python train.py --train data/manifests/grasp-anything++/train.jsonl --val data/manifests/grasp-anything++/val.jsonl \
-  --data-root data/raw --out runs/none --fusion none --epochs 30 --batch-size 16 --amp --amp-dtype bfloat16
-
-python train.py --train data/manifests/grasp-anything++/train.jsonl --val data/manifests/grasp-anything++/val.jsonl \
-  --data-root data/raw --out runs/concat --fusion concat --epochs 30 --batch-size 16 --amp --amp-dtype bfloat16
+  --epochs 500 --batch-size 8 --amp --amp-dtype bfloat16
 ```
 
-## Evaluate & predict
+Full fine-tuning (`configs/default.yaml` sets `freeze: false`; use a smaller
+backbone learning rate as in the paper):
 
 ```bash
-python eval.py --checkpoint runs/film/best.pt --manifest data/manifests/grasp-anything++/test_seen.jsonl \
-  --data-root data/raw --output runs/film/test_seen_metrics.json
+python train.py --config configs/default.yaml \
+  --train data/manifests/grasp-anything++/train.jsonl \
+  --val   data/manifests/grasp-anything++/val.jsonl \
+  --data-root data/raw --out runs/film_ft --fusion film \
+  --epochs 80 --batch-size 16 --amp --amp-dtype bfloat16
+```
 
-# or evaluate both splits at once -> two rows for the paper table:
-python eval.py --checkpoint runs/film/best.pt \
+Ablations — swap `--fusion` for the language-conditioning baseline:
+
+```bash
+python train.py ... --out runs/none   --fusion none    # no language
+python train.py ... --out runs/concat --fusion concat  # concatenation instead of FiLM
+```
+
+Checkpoints are written to `--checkpoint-dir` (default `runs/checkpoints`)
+as `epoch_XXXX.pt`, only after `--save-after` epochs and every `--save-every`
+epochs thereafter. Each run also writes `config.json` and `history.jsonl` to
+`--out`. Resume with `--resume <checkpoint>`; AMP settings must be unchanged.
+
+## Evaluation
+
+```bash
+# both official splits in one run (prints the table above)
+python eval.py --checkpoint runs/film/epoch_0500.pt \
   --both-splits data/manifests/grasp-anything++ --data-root data/raw \
   --output runs/film/test_metrics.json
 
-# language-dependency check: shuffled/empty instructions should hurt
-python eval.py --checkpoint runs/film/best.pt --manifest data/manifests/grasp-anything++/test_seen.jsonl \
-  --data-root data/raw --text-mode shuffle --output runs/film/shuffled_metrics.json
+# a single manifest
+python eval.py --checkpoint runs/film/epoch_0500.pt \
+  --manifest data/manifests/grasp-anything++/test_seen.jsonl \
+  --data-root data/raw --output runs/film/test_seen_metrics.json
 
-python predict.py --checkpoint runs/film/best.pt --image data/raw/grasp-anything/image/SCENE.jpg \
-  --text "Grasp the blue bottle." --output runs/film/blue_bottle.png --top-k 1
+# language-dependency check: shuffled / empty instructions
+python eval.py --checkpoint runs/film/epoch_0500.pt \
+  --manifest data/manifests/grasp-anything++/test_seen.jsonl \
+  --data-root data/raw --text-mode shuffle --output runs/film/shuffled.json
 ```
 
-Evaluation reports **Top-1/Top-5 grasp success**: a prediction is correct when
-its rotated-rectangle IoU with a ground-truth grasp exceeds `0.25` and the angle
-difference is within `30°` (mod 180°).
+`--both-splits DIR` reads `DIR/test_seen.jsonl` and `DIR/test_unseen.jsonl`,
+prints a compact `split / top1 / top5 / samples` table and writes a combined
+JSON with a `"splits"` object.
 
-`--both-splits DIR` reads `DIR/test_seen.jsonl` and `DIR/test_unseen.jsonl`, prints a
-compact table (`split / top1 / top5 / samples`) and writes a combined JSON with a
-`"splits"` object. `--manifest FILE` keeps the original single-manifest behaviour.
+## Prediction
+
+```bash
+python predict.py --checkpoint runs/film/epoch_0500.pt \
+  --image data/raw/grasp-anything/image/SCENE.jpg \
+  --text "Grasp the blue bottle." \
+  --output runs/film/blue_bottle.png --top-k 1
+```
 
 ## Notes
 
-- Metric is offline box-matching accuracy, **not** calibrated physical grasp
-  success.
-- `split --grasp-anything-split ...` reuses Grasp-Anything / LGD ID membership and holds validation
-  out of the training pool by scene. Plain `split` uses custom 80/10/10 scenes.
-- FiLM and SigLIP are existing methods — cite them; your contribution is the
-  task adaptation and the fusion ablation.
+- Reported numbers are offline box-matching accuracy, **not** calibrated
+  physical grasp success.
+- SigLIP 2 and FiLM are existing methods — the contribution here is the task
+  adaptation, the dense rotated-rectangle head and the fusion ablation.
+- `data/`, `runs/` and weight files are git-ignored; this repository ships code,
+  configs and the official split lists.

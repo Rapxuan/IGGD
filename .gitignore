@@ -9,3 +9,10 @@ __pycache__/
 *.pt
 *.pth
 *.safetensors
+
+# local-only: editor settings, personal notes, the paper and its assets
+.vscode/
+command.md
+/figs/
+paper/
+paper-modify/
